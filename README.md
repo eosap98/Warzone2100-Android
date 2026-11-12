@@ -1,14 +1,12 @@
 # Warzone 2100 Android — 4.7.0-android.6
 
-Port native ARM64 untuk Android 8.0 atau lebih baru. Snapshot terbaru proyek lokal: **12 November 2026**, versionCode **4070006**. Perubahan terakhir menambahkan rotasi kamera dengan dua jari, melanjutkan perbaikan bahasa dan koneksi multiplayer.
-
-Folder ini siap dijadikan repository GitHub. Isinya launcher Android, patch engine, skrip build, pengujian, lisensi, serta panduan. Source upstream lengkap, APK, paket Debian, aset game, cache kompilasi, dan kunci penandatanganan tidak disertakan. Ikon game diambil kembali dari upstream saat build.
+Port native ARM64 untuk Android 8.0 atau lebih baru. Snapshot terbaru proyek lokal: **12 November 2026**, versionCode **4070006**.
 
 ## Build
 
 Gunakan Linux x86_64; Ubuntu 24.04 atau WSL2 Ubuntu 24.04 di Windows disarankan. Proyek ini menggunakan skrip shell dan Android NDK; tidak menggunakan Gradle.
 
-1. Ikuti [BUILD-PC-BARU.md](BUILD-PC-BARU.md) untuk memasang prasyarat.
+1. Ikuti [BUILD-PC-BARU.md](BUILD-PC-BARU.md) untuk requirements.
 2. Jalankan dari folder ini:
 
 ```bash
