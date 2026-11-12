@@ -1,0 +1,97 @@
+[
+  {
+    "name": "iconv",
+    "url": "https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.17.tar.gz",
+    "sha256": "8f74213b56238c85a50a5329f77e06198771e70dd9a739779f4c02f65d971313"
+  },
+  {
+    "name": "gettext",
+    "url": "https://ftp.gnu.org/pub/gnu/gettext/gettext-0.22.5.tar.xz",
+    "sha256": "fe10c37353213d78a5b83d48af231e005c4da84db5ce88037d88355938259640"
+  },
+  {
+    "name": "zlib",
+    "url": "https://zlib.net/fossils/zlib-1.3.1.tar.gz",
+    "sha256": "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
+  },
+  {
+    "name": "ogg",
+    "url": "https://downloads.xiph.org/releases/ogg/libogg-1.3.5.tar.xz",
+    "sha256": "c4d91be36fc8e54deae7575241e03f4211eb102afb3fc0775fbbc1b740016705"
+  },
+  {
+    "name": "vorbis",
+    "url": "https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.xz",
+    "sha256": "b33cc4934322bcbf6efcbacf49e3ca01aadbea4114ec9589d1b1e9d20f72954b"
+  },
+  {
+    "name": "theora",
+    "url": "https://downloads.xiph.org/releases/theora/libtheora-1.1.1.tar.xz",
+    "sha256": "f36da409947aa2b3dcc6af0a8c2e3144bc19db2ed547d64e9171c59c66561c61"
+  },
+  {
+    "name": "opus",
+    "url": "https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz",
+    "sha256": "65c1d2f78b9f2fb20082c38cbe47c951ad5839345876e46941612ee87f9a7ce1"
+  },
+  {
+    "name": "sodium",
+    "url": "https://download.libsodium.org/libsodium/releases/libsodium-1.0.20.tar.gz",
+    "sha256": "ebb65ef6ca439333c2bb41a0c1990587288da07f6c7fd07cb3a18cc18d30ce19"
+  },
+  {
+    "name": "sqlite",
+    "url": "https://www.sqlite.org/2025/sqlite-autoconf-3500400.tar.gz",
+    "sha256": "a3db587a1b92ee5ddac2f66b3edb41b26f9c867275782d46c3a088977d6a5b18"
+  },
+  {
+    "name": "SDL",
+    "url": "https://github.com/libsdl-org/SDL/releases/download/release-3.2.20/SDL3-3.2.20.tar.gz",
+    "sha256": "467600ae090dd28616fa37369faf4e3143198ff1da37729b552137e47f751a67"
+  },
+  {
+    "name": "physfs",
+    "url": "https://github.com/icculus/physfs/archive/refs/tags/release-3.2.0.tar.gz",
+    "sha256": "1991500eaeb8d5325e3a8361847ff3bf8e03ec89252b7915e1f25b3f8ab5d560"
+  },
+  {
+    "name": "png",
+    "url": "https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.50.tar.gz",
+    "sha256": "71158e53cfdf2877bc99bcab33641d78df3f48e6e0daad030afe9cb8c031aa46"
+  },
+  {
+    "name": "freetype",
+    "url": "https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.xz",
+    "sha256": "0550350666d427c74daeb85d5ac7bb353acba5f76956395995311a9c6f063289"
+  },
+  {
+    "name": "harfbuzz",
+    "url": "https://github.com/harfbuzz/harfbuzz/archive/refs/tags/8.5.0.tar.gz",
+    "sha256": "7ad8e4e23ce776efb6a322f653978b3eb763128fd56a90252775edb9fd327956"
+  },
+  {
+    "name": "jpeg",
+    "url": "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.1/libjpeg-turbo-3.1.1.tar.gz",
+    "sha256": "aadc97ea91f6ef078b0ae3a62bba69e008d9a7db19b34e4ac973b19b71b4217c"
+  },
+  {
+    "name": "openal",
+    "url": "https://github.com/kcat/openal-soft/archive/refs/tags/1.24.3.tar.gz",
+    "sha256": "7e1fecdeb45e7f78722b776c5cf30bd33934b961d7fd2a11e0494e064cc631ce"
+  },
+  {
+    "name": "mbedtls",
+    "url": "https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v2.28.10.tar.gz",
+    "sha256": "0f2e0525903a89ae1d39ce439d858be66933bda54c5b6102b72a29ed8fe7c088"
+  },
+  {
+    "name": "curl",
+    "url": "https://curl.se/download/curl-8.14.1.tar.xz",
+    "sha256": "f4619a1e2474c4bbfedc88a7c2191209c8334b48fa1f4e53fd584cc12e9120dd"
+  },
+  {
+    "name": "zip",
+    "url": "https://libzip.org/download/libzip-1.11.4.tar.xz",
+    "sha256": "8a247f57d1e3e6f6d11413b12a6f28a9d388de110adc0ec608d893180ed7097b"
+  }
+]

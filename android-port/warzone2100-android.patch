@@ -1,0 +1,997 @@
+diff --git a/3rdparty/CMakeLists.txt b/3rdparty/CMakeLists.txt
+index 46c0c26e1e75d64a895708c0c48cbba866ff5e72..22a8ab783958c32db4d0155c5fde78704e22c104 100644
+--- a/3rdparty/CMakeLists.txt
++++ b/3rdparty/CMakeLists.txt
+@@ -109,7 +109,7 @@ add_subdirectory(quickjs-wz EXCLUDE_FROM_ALL)
+ set_property(TARGET qjs PROPERTY FOLDER "3rdparty")
+ 
+ 
+-if (WZ_ENABLE_BASIS_UNIVERSAL AND NOT WZ_CI_DISABLE_BASIS_COMPRESS_TEXTURES)
++if (WZ_ENABLE_BASIS_UNIVERSAL AND NOT WZ_CI_DISABLE_BASIS_COMPRESS_TEXTURES AND NOT WZ_USE_PREBUILT_DATA)
+ 
+ 	# basis-universal
+ 	set(_ORIGINAL_CMAKE_PROGRAM_PATH "${CMAKE_PROGRAM_PATH}")
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 5012b288162e440ed23df379b8278eefe4626b75..62657b71364767fa89c7f2a14e7dea3515a705a5 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -8,6 +8,12 @@ unset(_OLD_CMAKE_MODULE_PATH)
+ 
+ project(warzone2100)
+ 
++if(ANDROID)
++	# The APK packages the matching release's prepared .wz archives.
++	set(WZ_USE_PREBUILT_DATA ON)
++	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
++endif()
++
+ include(CMakeDependentOption)
+ 
+ OPTION(WZ_ENABLE_WARNINGS "Enable (additional) warnings" OFF)
+@@ -890,12 +896,20 @@ set(wz2100_ROOT_FILES ChangeLog AUTHORS COPYING.NONGPL "${WZ_DIST_LICENSE}" COPY
+ 
+ CONFIGURE_WZ_COMPILER_WARNINGS()
+ add_subdirectory(build_tools)
+-add_subdirectory(data)
++if(WZ_USE_PREBUILT_DATA)
++	add_custom_target(data)
++else()
++	add_subdirectory(data)
++endif()
+ add_subdirectory(lib)
+-add_subdirectory(doc)
+-add_subdirectory(po)
++if(NOT ANDROID)
++	add_subdirectory(doc)
++	add_subdirectory(po)
++endif()
+ add_subdirectory(src)
+-add_subdirectory(pkg)
++if(NOT ANDROID)
++	add_subdirectory(pkg)
++endif()
+ 
+ # Install base text / info files
+ if(CMAKE_SYSTEM_NAME MATCHES "Windows")
+diff --git a/cmake/FindTheora.cmake b/cmake/FindTheora.cmake
+index 8bc6f62c1ae6ee5205923b100965924c2f36b1da..27d52bd8a44d1e3491244c7c0bbb3460a89d96cd 100644
+--- a/cmake/FindTheora.cmake
++++ b/cmake/FindTheora.cmake
+@@ -61,11 +61,13 @@ find_library(THEORA_dec_LIBRARY
+ 
+ set(THEORA_LIBRARIES ${THEORA_enc_LIBRARY} ${THEORA_dec_LIBRARY})
+ 
+-add_library(theora::enc UNKNOWN IMPORTED)
+-set_target_properties(theora::enc
+-  PROPERTIES
+-  IMPORTED_LOCATION ${THEORA_enc_LIBRARY}
+-  INTERFACE_INCLUDE_DIRECTORIES ${THEORA_INCLUDE_DIR})
++if(THEORA_enc_LIBRARY)
++  add_library(theora::enc UNKNOWN IMPORTED)
++  set_target_properties(theora::enc
++    PROPERTIES
++    IMPORTED_LOCATION ${THEORA_enc_LIBRARY}
++    INTERFACE_INCLUDE_DIRECTORIES ${THEORA_INCLUDE_DIR})
++endif()
+ 
+ add_library(theora::dec UNKNOWN IMPORTED)
+ set_target_properties(theora::dec
+@@ -74,6 +76,11 @@ set_target_properties(theora::dec
+   INTERFACE_INCLUDE_DIRECTORIES ${THEORA_INCLUDE_DIR})
+ 
+ include(FindPackageHandleStandardArgs)
+-find_package_handle_standard_args(Theora DEFAULT_MSG THEORA_enc_LIBRARY THEORA_dec_LIBRARY THEORA_INCLUDE_DIR)
++if(ANDROID)
++  # Warzone only decodes cinematics; the Android package does not encode video.
++  find_package_handle_standard_args(Theora DEFAULT_MSG THEORA_dec_LIBRARY THEORA_INCLUDE_DIR)
++else()
++  find_package_handle_standard_args(Theora DEFAULT_MSG THEORA_enc_LIBRARY THEORA_dec_LIBRARY THEORA_INCLUDE_DIR)
++endif()
+ 
+ mark_as_advanced(THEORA_enc_LIBRARY THEORA_dec_LIBRARY THEORA_INCLUDE_DIR)
+diff --git a/lib/exceptionhandler/exceptionhandler.cpp b/lib/exceptionhandler/exceptionhandler.cpp
+index b681d9d52c87dc0e122bb60886a2c6e479bd51c3..00b7009d8fd6e489d2b99e5869cd8935eb4f9131 100644
+--- a/lib/exceptionhandler/exceptionhandler.cpp
++++ b/lib/exceptionhandler/exceptionhandler.cpp
+@@ -784,7 +784,7 @@ void setupExceptionHandler(int argc, const char * const *argv, const char *packa
+ 
+ #if defined(WZ_OS_WIN)
+ 	ExchndlSetup(packageVersion, writeDir, portable_mode);
+-#elif defined(WZ_OS_UNIX) && !defined(WZ_OS_MAC) && !defined(__EMSCRIPTEN__)
++#elif defined(WZ_OS_UNIX) && !defined(WZ_OS_MAC) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+ 	programCommand = argv[0];
+ 
+ 	// Get full path to this program. Needed for gdb to find the binary.
+diff --git a/lib/framework/CMakeLists.txt b/lib/framework/CMakeLists.txt
+index acbe52d9229a7be596adbc215bc0cf6af4ea0ae6..25b765197dcd55f2588a50f2b1118e9372f8d354 100644
+--- a/lib/framework/CMakeLists.txt
++++ b/lib/framework/CMakeLists.txt
+@@ -19,8 +19,13 @@ WZ_TARGET_CONFIGURATION(framework)
+ target_link_libraries(framework PUBLIC ${PHYSFS_LIBRARY} unofficial-sodium::sodium)
+ target_link_libraries(framework PRIVATE utf8proc)
+ if(ENABLE_NLS)
+-	target_include_directories(framework PRIVATE "${Intl_INCLUDE_DIRS}")
++	target_include_directories(framework PUBLIC "${Intl_INCLUDE_DIRS}")
+ 	target_link_libraries(framework PUBLIC ${Intl_LIBRARIES})
++	if(ANDROID)
++		# Android's libc has no gettext; our static libintl uses libiconv.
++		find_package(Iconv REQUIRED)
++		target_link_libraries(framework PUBLIC Iconv::Iconv)
++	endif()
+ endif()
+ target_include_directories(framework PUBLIC "${PHYSFS_INCLUDE_DIR}" "${CMAKE_SOURCE_DIR}/3rdparty")
+ target_compile_definitions(framework PRIVATE "YY_NO_UNISTD_H")
+diff --git a/lib/framework/android_locale.h b/lib/framework/android_locale.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..ef1566291ea6fd53f4753ed8e553c27cd19f3a61
+--- /dev/null
++++ b/lib/framework/android_locale.h
+@@ -0,0 +1,29 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++#pragma once
++
++#include <clocale>
++#include <cstdlib>
++#include <libintl.h>
++
++namespace wz_android
++{
++// Bionic only provides C / C.UTF-8 locales. Let gettext choose the catalog via
++// LANGUAGE instead of asking setlocale() for unavailable locales such as id_ID.
++inline bool setCatalogLanguage(const char *language, const char *domain)
++{
++	if (!language || !*language || !setlocale(LC_ALL, "C.UTF-8"))
++	{
++		return false;
++	}
++	// On Android GNU gettext reads the locale environment, rather than trusting
++	// Bionic's limited setlocale() result. A plain C default ignores LANGUAGE.
++	if (setenv("LC_ALL", "C.UTF-8", 1) != 0 || setenv("LANGUAGE", language, 1) != 0)
++	{
++		return false;
++	}
++	setlocale(LC_NUMERIC, "C"); // Keep config files and simulation numbers portable.
++	// This invalidates gettext's cache after LANGUAGE changes, even when the
++	// text domain and libc locale stay the same.
++	return textdomain(domain) != nullptr;
++}
++}
+diff --git a/lib/framework/i18n.cpp b/lib/framework/i18n.cpp
+index 5963bb8f8f76c2f689880e91d12946aa05ff1d4a..0973c224df06cf67ab16cf65fd07ecdc5a7842f3 100644
+--- a/lib/framework/i18n.cpp
++++ b/lib/framework/i18n.cpp
+@@ -26,6 +26,10 @@
+ #include <physfs.h>
+ #include "wzpaths.h"
+ 
++#if defined(__ANDROID__) && ENABLE_NLS
++# include "android_locale.h"
++#endif
++
+ #ifdef WZ_OS_MAC
+ # include <CoreFoundation/CoreFoundation.h>
+ # include <CoreFoundation/CFURL.h>
+@@ -110,7 +114,7 @@ static const struct
+ } map[] =
+ {
+ 	{ "", N_("System locale"), "", LANG_NEUTRAL, SUBLANG_DEFAULT },
+-#  if defined(ENABLE_NLS)
++#  if ENABLE_NLS
+ 	{ "ar_SA", LANG_NAME_ARABIC, "ar_SA", LANG_ARABIC, SUBLANG_DEFAULT },
+ 	{ "bg", LANG_NAME_BULGARIAN, "bg_BG", LANG_BULGARIAN, SUBLANG_DEFAULT },
+ 	{ "ca_ES", LANG_NAME_CATALAN, "ca_ES", LANG_CATALAN, SUBLANG_DEFAULT },
+@@ -178,7 +182,7 @@ static const struct
+ } map[] =
+ {
+ 	{ "",   N_("System locale"), "", "", "" },
+-#  if defined(ENABLE_NLS)
++#  if ENABLE_NLS
+ 	{ "ar_SA", LANG_NAME_ARABIC, "ar_SA", "ar_SA.UTF-8", "ar"},
+ 	{ "bg", LANG_NAME_BULGARIAN, "bg_BG", "bg_BG.UTF-8", "bg" },
+ 	{ "ca_ES", LANG_NAME_CATALAN, "ca_ES", "ca_ES.UTF-8", "ca" },
+@@ -237,11 +241,17 @@ static std::string compileDate;
+ /*!
+  * Return the language part of the selected locale
+  */
+-#if !defined(ENABLE_NLS)
++#if !ENABLE_NLS
+ const char *getLanguage()
+ {
+ 	return "";
+ }
++#elif defined(__ANDROID__)
++const char *getLanguage()
++{
++	// Bionic's LC_MESSAGES stays C.UTF-8; persist the user's actual selection.
++	return map[selectedLanguage].language;
++}
+ #elif defined(WZ_OS_WIN)
+ const char *getLanguage()
+ {
+@@ -316,7 +326,7 @@ const char *getLanguageName()
+ }
+ 
+ 
+-#if defined(ENABLE_NLS)
++#if ENABLE_NLS
+ #  if defined(WZ_OS_WIN)
+ static bool setLocaleWindows(USHORT usPrimaryLanguage, USHORT usSubLanguage)
+ {
+@@ -335,6 +345,34 @@ static bool setLocaleWindows(USHORT usPrimaryLanguage, USHORT usSubLanguage)
+ 
+ 	return success;
+ }
++#  elif defined(__ANDROID__)
++static bool setLocaleAndroid(const char *localeFilename)
++{
++	std::string language = localeFilename;
++	if (language.empty())
++	{
++		const char *systemLanguage = getenv("WZ_ANDROID_LOCALE");
++		language = (systemLanguage && *systemLanguage) ? systemLanguage : "en";
++		const auto baseLanguage = language.substr(0, language.find('_'));
++		// Match Android's locale to the catalog names used by the dropdown.
++		const char *fallback = nullptr;
++		for (const auto &entry : map)
++		{
++			if (language == entry.language || language == entry.localeFilename)
++			{
++				fallback = entry.localeFilename;
++				break;
++			}
++			std::string catalog = entry.localeFilename;
++			if (!fallback && baseLanguage == catalog.substr(0, catalog.find('_')))
++			{
++				fallback = entry.localeFilename;
++			}
++		}
++		if (fallback) { language = fallback; }
++	}
++	return wz_android::setCatalogLanguage(language.c_str(), PACKAGE);
++}
+ #  elif defined(__EMSCRIPTEN__)
+ static bool setLocaleEmscripten(const char *localeFilename)
+ {
+@@ -426,7 +464,7 @@ static bool setLocaleUnix_LANGUAGEFallback(const char *localeFilename)
+ 
+ bool setLanguage(const char *language)
+ {
+-#if !defined(ENABLE_NLS)
++#if !ENABLE_NLS
+ 	return true;
+ #else
+ 	unsigned int i;
+@@ -440,6 +478,8 @@ bool setLanguage(const char *language)
+ 
+ #  if defined(WZ_OS_WIN)
+ 			return setLocaleWindows(map[i].usPrimaryLanguage, map[i].usSubLanguage);
++#  elif defined(__ANDROID__)
++			return setLocaleAndroid(map[i].localeFilename);
+ #  elif defined(__EMSCRIPTEN__)
+ 			return setLocaleEmscripten(map[i].localeFilename);
+ #  else
+@@ -654,7 +694,14 @@ void initI18n()
+ 	debug(LOG_WZ, "libintl version: %d.%d.%d", wz_libintl_maj, wz_libintl_min, wz_libintl_rev);
+ #endif
+ 
+-#ifdef WZ_OS_MAC
++#if defined(__ANDROID__)
++	// GameActivity supplies the private path before the engine starts.
++	const char *localeDir = getenv("WZ_LOCALEDIR");
++	if (localeDir && *localeDir)
++	{
++		boundAtLeastMainTextDomain = wzBindAllWZTextDomains(localeDir);
++	}
++#elif defined(WZ_OS_MAC)
+ 	{
+ 		char resourcePath[PATH_MAX];
+ 		CFURLRef resourceURL = CFBundleCopyResourcesDirectoryURL(CFBundleGetMainBundle());
+diff --git a/lib/netplay/tcp/netsocket.cpp b/lib/netplay/tcp/netsocket.cpp
+index 90c56f13b07080c3f90c5093f2ad26f93c711b25..9017cae9afb69ce988250273b103e2265e05f89a 100644
+--- a/lib/netplay/tcp/netsocket.cpp
++++ b/lib/netplay/tcp/netsocket.cpp
+@@ -850,7 +850,9 @@ net::result<SocketAddress*> resolveHost(const char *host, unsigned int port)
+ 	hint.ai_family    = AF_UNSPEC;
+ 	hint.ai_socktype  = SOCK_STREAM;
+ 	hint.ai_protocol  = 0;
+-#ifdef AI_V4MAPPED
++// Bionic declares AI_V4MAPPED but rejects it in getaddrinfo (EAI_BADFLAGS).
++// AF_UNSPEC already lets Android return both IPv4 and IPv6 addresses without it.
++#if defined(AI_V4MAPPED) && !defined(__ANDROID__)
+ 	flags             |= AI_V4MAPPED;
+ #endif
+ #ifdef AI_ADDRCONFIG
+diff --git a/lib/sdl/CMakeLists.txt b/lib/sdl/CMakeLists.txt
+index d31ad6826f2361b644a91bd98e3d13b6f6070204..12b56d235439be8d09bebf764a4231aa5b9ca498 100644
+--- a/lib/sdl/CMakeLists.txt
++++ b/lib/sdl/CMakeLists.txt
+@@ -23,4 +23,8 @@ set_property(TARGET sdl-backend PROPERTY FOLDER "lib")
+ 
+ message( STATUS "Linking to SDL3 library" )
+ target_link_libraries(sdl-backend PRIVATE SDL3::SDL3)
++if(ANDROID)
++	find_package(OpenAL CONFIG REQUIRED)
++	target_link_libraries(sdl-backend PRIVATE OpenAL::OpenAL)
++endif()
+ target_compile_definitions(sdl-backend PRIVATE "-DHAVE_SDL_VULKAN_H")
+diff --git a/lib/sdl/android_input.cpp b/lib/sdl/android_input.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..604cd6bf2cbb0aa699db90147459360bd546b84f
+--- /dev/null
++++ b/lib/sdl/android_input.cpp
+@@ -0,0 +1,118 @@
++// Android touch adapter. SPDX-License-Identifier: GPL-2.0-or-later
++#if defined(__ANDROID__)
++#include "android_input.h"
++#include "touch_gestures.h"
++#include "src/android_touch.h"
++#include <SDL3/SDL.h>
++#include <jni.h>
++#include <AL/alc.h>
++#include <set>
++
++extern float current_displayScaleFactor;
++namespace {
++using namespace wz::touch;
++bool usingTouch = true, uiGesture = false, uiPressed = false;
++SDL_FingerID uiFinger = 0;
++SDL_WindowID touchWindow = 0;
++std::set<SDL_FingerID> contacts;
++Point uiPosition{};
++Gestures gestures([](const Action &action) {
++    if (action.kind != Kind::BoxCancel) {
++        wzAndroidSetPointer(action.at.x * current_displayScaleFactor, action.at.y * current_displayScaleFactor);
++    }
++    androidApplyWorldGesture(action);
++});
++
++void uiButton(bool down, Point p) {
++    SDL_Event ev{};
++    ev.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
++    ev.button.windowID = touchWindow;
++    ev.button.which = SDL_TOUCH_MOUSEID;
++    ev.button.button = SDL_BUTTON_LEFT;
++    ev.button.down = down;
++    ev.button.clicks = 1;
++    ev.button.x = p.x; ev.button.y = p.y;
++    SDL_PushEvent(&ev);
++    uiPressed = down;
++}
++void uiMotion(Point p) {
++    SDL_Event ev{};
++    ev.type = SDL_EVENT_MOUSE_MOTION;
++    ev.motion.windowID = touchWindow;
++    ev.motion.which = SDL_TOUCH_MOUSEID;
++    ev.motion.state = uiPressed ? SDL_BUTTON_LMASK : 0;
++    ev.motion.x = p.x; ev.motion.y = p.y;
++    ev.motion.xrel = p.x - uiPosition.x; ev.motion.yrel = p.y - uiPosition.y;
++    SDL_PushEvent(&ev); uiPosition = p;
++}
++void cancelTouches() {
++    gestures.cancel();
++    if (uiPressed) uiButton(false, {-100, -100}); // Release outside controls, never activate a button on cancellation.
++    contacts.clear(); uiGesture = false;
++}
++}
++
++extern "C" JNIEXPORT void JNICALL
++Java_org_warzone2100_android_GameActivity_nativePauseAudio(JNIEnv *, jclass, jboolean paused)
++{
++    ALCcontext *context = alcGetCurrentContext();
++    if (!context) return;
++    ALCdevice *device = alcGetContextsDevice(context);
++    if (!device || !alcIsExtensionPresent(device, "ALC_SOFT_pause_device")) return;
++    using DeviceFunction = void (*)(ALCdevice *);
++    auto function = reinterpret_cast<DeviceFunction>(alcGetProcAddress(
++        device, paused ? "alcDevicePauseSOFT" : "alcDeviceResumeSOFT"));
++    if (function) function(device);
++}
++
++bool wzAndroidUsingTouch() { return usingTouch; }
++
++void wzAndroidHandleEvent(const SDL_Event &event)
++{
++    if ((event.type == SDL_EVENT_MOUSE_MOTION && event.motion.which != SDL_TOUCH_MOUSEID) ||
++        ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.which != SDL_TOUCH_MOUSEID)) {
++        usingTouch = false;
++        gestures.cancel();
++    }
++    if (event.type == SDL_EVENT_WILL_ENTER_BACKGROUND || event.type == SDL_EVENT_WINDOW_FOCUS_LOST ||
++        event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || event.type == SDL_EVENT_FINGER_CANCELED) {
++        cancelTouches(); return;
++    }
++    if (event.type != SDL_EVENT_FINGER_DOWN && event.type != SDL_EVENT_FINGER_MOTION && event.type != SDL_EVENT_FINGER_UP) return;
++    usingTouch = true;
++    const auto &finger = event.tfinger;
++    SDL_Window *window = SDL_GetWindowFromID(finger.windowID);
++    if (!window) return;
++    int width = 0, height = 0; SDL_GetWindowSize(window, &width, &height);
++    Point pixel{finger.x * width, finger.y * height};
++    Point logical{pixel.x / current_displayScaleFactor, pixel.y / current_displayScaleFactor};
++    uint64_t time = finger.timestamp / 1000000;
++    if (event.type == SDL_EVENT_FINGER_DOWN) {
++        if (contacts.empty()) {
++            touchWindow = finger.windowID;
++            uiGesture = !androidWorldInputAt(logical);
++            if (uiGesture) {
++                gestures.cancel(); uiFinger = finger.fingerID;
++                uiMotion(pixel); uiButton(true, pixel);
++            }
++        }
++        contacts.insert(finger.fingerID);
++        if (!uiGesture) gestures.down(finger.fingerID, logical, time);
++    } else if (contacts.count(finger.fingerID)) {
++        if (uiGesture && finger.fingerID == uiFinger && uiPressed) {
++            uiMotion(pixel);
++            if (event.type == SDL_EVENT_FINGER_UP) uiButton(false, pixel);
++        } else if (!uiGesture) {
++            if (event.type == SDL_EVENT_FINGER_MOTION) gestures.motion(finger.fingerID, logical, time);
++            else gestures.up(finger.fingerID, logical, time);
++        }
++        if (event.type == SDL_EVENT_FINGER_UP) contacts.erase(finger.fingerID);
++    }
++}
++
++void wzAndroidUpdateGestures()
++{
++    if (!androidWorldInputAvailable()) gestures.cancel();
++    else gestures.tick(SDL_GetTicks());
++}
++#endif
+diff --git a/lib/sdl/android_input.h b/lib/sdl/android_input.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..dd000044117101fcbdbde3173d2797807d1e8f49
+--- /dev/null
++++ b/lib/sdl/android_input.h
+@@ -0,0 +1,9 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++#pragma once
++#if defined(__ANDROID__)
++#include <SDL3/SDL_events.h>
++void wzAndroidHandleEvent(const SDL_Event &event);
++void wzAndroidUpdateGestures();
++void wzAndroidSetPointer(float x, float y);
++bool wzAndroidUsingTouch();
++#endif
+diff --git a/lib/sdl/main_sdl.cpp b/lib/sdl/main_sdl.cpp
+index 7edcc9cdd168fb392f8cb725d328957c0a3e137f..dc9bd17ab165dfb6600d783f5d92a862baaf8a8f 100644
+--- a/lib/sdl/main_sdl.cpp
++++ b/lib/sdl/main_sdl.cpp
+@@ -38,6 +38,7 @@
+ #include "gfx_api_sdl.h"
+ #include "gfx_api_gl_sdl.h"
+ #include "sdl_backend_private.h"
++#include "android_input.h"
+ 
+ #if defined( _MSC_VER )
+ 	// Silence warning when using MSVC ARM64 compiler
+@@ -90,6 +91,14 @@ int realmain(int argc, char *argv[]);
+ #include <SDL3/SDL_main.h>
+ int main(int argc, char *argv[])
+ {
++#if defined(__ANDROID__)
++	// SDLActivity owns lifecycle and the native surface. Our touch adapter
++	// below generates mouse events, so SDL must not generate duplicates.
++	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
++	SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "0");
++	SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
++	SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
++#endif
+ 	return realmain(argc, argv);
+ }
+ 
+@@ -413,7 +422,9 @@ std::vector<unsigned int> wzAvailableDisplayScales()
+ std::vector<video_backend> wzAvailableGfxBackends()
+ {
+ 	std::vector<video_backend> availableBackends;
+-#if defined(__EMSCRIPTEN__)
++#if defined(__ANDROID__)
++	availableBackends.push_back(video_backend::opengles);
++#elif defined(__EMSCRIPTEN__)
+ // EMSCRIPTEN:
+ 	// - Only supports OpenGL ES (WebGL) backend
+ 	availableBackends.push_back(video_backend::opengles);
+@@ -1810,6 +1821,17 @@ static void inputHandleMouseMotionEvent(SDL_MouseMotionEvent *motionEvent)
+ }
+ 
+ static int copied_argc = 0;
++#if defined(__ANDROID__)
++void wzAndroidSetPointer(float x, float y)
++{
++	SDL_MouseMotionEvent motion{};
++	motion.type = SDL_EVENT_MOUSE_MOTION;
++	motion.x = x;
++	motion.y = y;
++	inputHandleMouseMotionEvent(&motion);
++}
++#endif
++
+ static char** copied_argv = nullptr;
+ 
+ // This stage, we only setup keycodes, and copy argc & argv for later use initializing stuff.
+@@ -2646,7 +2668,12 @@ optional<SDL_gfx_api_Impl_Factory::Configuration> wzMainScreenSetup_CreateVideoW
+ 		|| (backend == video_backend::directx)
+ #endif
+ 	;
+-	const bool useOpenGLESLibrary = false
++	const bool useOpenGLESLibrary =
++#if defined(__ANDROID__)
++		true
++#else
++		false
++#endif
+ #if defined(WZ_BACKEND_DIRECTX)
+ 		|| (backend == video_backend::directx)
+ #endif
+@@ -3681,6 +3708,9 @@ void wzEventLoopOneFrame(void* arg)
+ 	/* Deal with any windows messages */
+ 	while (SDL_PollEvent(&event))
+ 	{
++#if defined(__ANDROID__)
++		wzAndroidHandleEvent(event);
++#endif
+ 		switch (event.type)
+ 		{
+ 		case SDL_EVENT_KEY_UP:
+@@ -3751,6 +3781,9 @@ void wzEventLoopOneFrame(void* arg)
+ 	}
+ 
+ 	processScreenSizeChangeNotificationIfNeeded();
++#if defined(__ANDROID__)
++	wzAndroidUpdateGestures();
++#endif
+ 	mainLoop();				// WZ does its thing
+ 	inputNewFrame();			// reset input states
+ #if defined(__EMSCRIPTEN__)
+diff --git a/lib/sdl/touch_gestures.h b/lib/sdl/touch_gestures.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..905d5f4e8ee5d97da43f704d98623d7defda037e
+--- /dev/null
++++ b/lib/sdl/touch_gestures.h
+@@ -0,0 +1,196 @@
++// Touch gesture recognition, independent of SDL/Android for deterministic tests.
++// SPDX-License-Identifier: GPL-2.0-or-later
++#pragma once
++#include <algorithm>
++#include <cmath>
++#include <cstdint>
++#include <functional>
++#include <map>
++#include <optional>
++#include <iterator>
++#include <utility>
++
++namespace wz { namespace touch {
++struct Point { float x = 0, y = 0; };
++inline float distance(Point a, Point b) { return std::hypot(a.x - b.x, a.y - b.y); }
++enum class Kind { Tap, DoubleTap, Pan, BoxBegin, BoxMove, BoxEnd, BoxCancel, Deselect, Pinch, Rotate };
++struct Action {
++    Kind kind;
++    Point at{}, from{};
++    float scale = 1; // New camera distance / old camera distance.
++    float radians = 0; // Incremental clockwise rotation, in screen coordinates.
++};
++
++class Gestures {
++public:
++    using Time = uint64_t;
++    using FingerId = int64_t;
++    static constexpr Time HoldMs = 420, DoubleTapMs = 300, TapMs = 280;
++    static constexpr float Slop = 12, DoubleTapRadius = 28;
++    explicit Gestures(std::function<void(const Action &)> output) : emit(std::move(output)) {}
++    bool touching() const { return !fingers.empty(); }
++
++    void down(FingerId id, Point p, Time now) {
++        if (fingers.count(id)) return;
++        tick(now);
++        if (fingers.empty()) {
++            if (tap && (now > tap->time + DoubleTapMs || distance(p, tap->at) > DoubleTapRadius)) flushTap();
++            mode = Mode::Pending; start = now; origin = p;
++            fingers.emplace(id, Finger{p, p});
++            return;
++        }
++        tap.reset(); // Never issue an order when a second finger starts a gesture.
++        if (mode == Mode::Box) emit({Kind::BoxCancel});
++        bool mayDeselect = mode == Mode::Pending && now - start <= TapMs;
++        fingers.emplace(id, Finger{p, p});
++        if (fingers.size() != 2 || mode == Mode::Blocked) { mode = Mode::Blocked; return; }
++        mode = Mode::Two;
++        twoTap = mayDeselect; pinching = twisting = twoDirty = false;
++        twoMode = TwoMode::Pending;
++        initialDistance = lastDistance = pairDistance();
++        twoCenter = lastCenter = pairCenter();
++        pairStartA = fingers.begin()->second.at;
++        pairStartB = std::next(fingers.begin())->second.at;
++        lastAngle = pairAngle(); pendingAngle = 0;
++        angleValid = initialDistance >= MinTwistSpan;
++    }
++
++    void motion(FingerId id, Point p, Time now) {
++        auto it = fingers.find(id);
++        if (it == fingers.end()) return;
++        // Honor a completed hold even if rendering stalled between samples.
++        if (mode == Mode::Pending && now - start >= HoldMs && it->second.travel <= Slop) tick(now);
++        Point previous = it->second.at;
++        it->second.at = p;
++        it->second.travel = std::max(it->second.travel, distance(it->second.start, p));
++        if (mode == Mode::Pending) {
++            if (it->second.travel > Slop) {
++                mode = Mode::Pan; tap.reset();
++                emit({Kind::Pan, p, origin});
++            } else tick(now);
++        } else if (mode == Mode::Pan) {
++            emit({Kind::Pan, p, previous});
++        } else if (mode == Mode::Box) {
++            emit({Kind::BoxMove, p, origin});
++        } else if (mode == Mode::Two) {
++            if (it->second.travel > Slop) twoTap = false;
++            // SDL sends one motion event per finger. Read the pair once at the
++            // end of the frame so a parallel swipe is not mistaken for a pinch
++            // or twist while only the first finger's position has been updated.
++            twoDirty = fingers.size() == 2;
++        }
++    }
++
++    void up(FingerId id, Point p, Time now) {
++        if (!fingers.count(id)) return;
++        motion(id, p, now);
++        updateTwo(); // Commit the final positions before either finger is removed.
++        if (mode == Mode::Pending && now - start <= TapMs) {
++            if (tap && now - tap->time <= DoubleTapMs && distance(p, tap->at) <= DoubleTapRadius) {
++                tap.reset(); emit({Kind::DoubleTap, p});
++            } else {
++                flushTap(); tap = Tap{p, now};
++            }
++        } else if (mode == Mode::Box) {
++            emit({distance(origin, p) > Slop ? Kind::BoxEnd : Kind::BoxCancel, p, origin});
++        } else if (mode == Mode::Pending) {
++            tap.reset();
++        }
++        fingers.erase(id);
++        if (fingers.empty()) {
++            if (mode == Mode::Two && twoTap && now - start <= TapMs) emit({Kind::Deselect, twoCenter});
++            mode = Mode::None;
++        }
++    }
++
++    void tick(Time now) {
++        // A possible second tap must finish before committing the first tap.
++        if (tap && now > tap->time + DoubleTapMs && fingers.empty()) flushTap();
++        if (mode == Mode::Pending && fingers.size() == 1 && now - start >= HoldMs) {
++            tap.reset(); mode = Mode::Box;
++            emit({Kind::BoxBegin, origin, origin});
++        }
++        updateTwo();
++    }
++
++    void cancel() {
++        if (mode == Mode::Box) emit({Kind::BoxCancel});
++        fingers.clear(); tap.reset(); mode = Mode::None; twoDirty = false;
++    }
++private:
++    enum class Mode { None, Pending, Pan, Box, Two, Blocked };
++    enum class TwoMode { Pending, Swipe, Transform };
++    static constexpr float Pi = 3.14159265358979323846f;
++    static constexpr float TwistSlop = Pi / 30; // Six degrees, plus the movement slop below.
++    static constexpr float MinTwistSpan = 2 * Slop;
++    static constexpr float SwipeRadiansPerPixel = Pi / 720; // Desktop sensitivity: 0.25 degrees/pixel.
++    struct Finger { Point start, at; float travel = 0; };
++    struct Tap { Point at; Time time; };
++    std::function<void(const Action &)> emit;
++    std::map<FingerId, Finger> fingers;
++    std::optional<Tap> tap;
++    Mode mode = Mode::None;
++    TwoMode twoMode = TwoMode::Pending;
++    Time start = 0;
++    Point origin{}, twoCenter{}, lastCenter{}, pairStartA{}, pairStartB{};
++    bool twoTap = false, pinching = false, twisting = false, twoDirty = false, angleValid = false;
++    float initialDistance = 0, lastDistance = 0;
++    float lastAngle = 0, pendingAngle = 0;
++    float pairDistance() const { auto a = fingers.begin(), b = std::next(a); return distance(a->second.at, b->second.at); }
++    Point pairCenter() const { auto a = fingers.begin(), b = std::next(a); return {(a->second.at.x + b->second.at.x) / 2, (a->second.at.y + b->second.at.y) / 2}; }
++    float pairAngle() const { auto a = fingers.begin(), b = std::next(a); return std::atan2(b->second.at.y - a->second.at.y, b->second.at.x - a->second.at.x); }
++
++    void updateTwo() {
++        if (mode != Mode::Two || !twoDirty || fingers.size() != 2) return;
++        twoDirty = false;
++        const float current = pairDistance();
++        const Point center = pairCenter();
++        const float angle = pairAngle();
++        if (angleValid && current >= MinTwistSpan) {
++            const float delta = std::remainder(angle - lastAngle, 2 * Pi);
++            // Near-overlapping fingers can exchange sides between samples.
++            // Rebase an ambiguous half-turn rather than snapping the camera.
++            if (std::abs(delta) > Pi / 2) { pendingAngle = 0; twisting = false; }
++            else pendingAngle += delta;
++        } else { pendingAngle = 0; twisting = false; }
++        angleValid = current >= MinTwistSpan;
++        lastAngle = angle;
++
++        const bool wantsTwist = std::abs(pendingAngle) > TwistSlop &&
++            std::abs(pendingAngle) * current / 2 > Slop;
++        const bool wantsPinch = std::abs(current - initialDistance) > Slop;
++        if (twoMode == TwoMode::Pending) {
++            const float dxA = fingers.begin()->second.at.x - pairStartA.x;
++            const float dxB = std::next(fingers.begin())->second.at.x - pairStartB.x;
++            const float smaller = std::min(std::abs(dxA), std::abs(dxB));
++            const float larger = std::max(std::abs(dxA), std::abs(dxB));
++            // Both fingers must travel horizontally together. An anchored or
++            // expanding pinch must not rotate just because its midpoint moves.
++            const bool swipe = dxA * dxB > 0 && smaller > Slop && smaller * 2 >= larger &&
++                std::abs(center.x - twoCenter.x) > std::abs(center.y - twoCenter.y) && !wantsTwist;
++            if (swipe) twoMode = TwoMode::Swipe;
++            else if (wantsPinch || wantsTwist) twoMode = TwoMode::Transform;
++            if (twoMode != TwoMode::Pending) twoTap = false;
++        }
++
++        if (twoMode == TwoMode::Swipe) {
++            const float rotation = (center.x - lastCenter.x) * SwipeRadiansPerPixel;
++            if (rotation != 0) emit({Kind::Rotate, center, {}, 1, rotation});
++            lastCenter = center;
++        } else if (twoMode == TwoMode::Transform) {
++            if (wantsPinch) pinching = true;
++            if (pinching) {
++                if (current > 1 && lastDistance > 1 && current != lastDistance)
++                    emit({Kind::Pinch, center, {}, lastDistance / current});
++                lastDistance = current;
++            }
++            if (wantsTwist) twisting = true;
++            if (twisting && pendingAngle != 0) {
++                emit({Kind::Rotate, center, {}, 1, pendingAngle});
++                pendingAngle = 0;
++            }
++        }
++    }
++    void flushTap() { if (tap) { Point p = tap->at; tap.reset(); emit({Kind::Tap, p}); } }
++};
++}} // namespace wz::touch
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 4f07f0edb5d865e5a182ba1c7781247808b7082e..4dbfd3ba9b2ef5cf9de5996d9715faa81906abbe 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -96,7 +96,15 @@ if(CMAKE_SYSTEM_NAME MATCHES "Windows")
+ 	set(_additionalSourceFiles "${CMAKE_CURRENT_BINARY_DIR}/warzone2100.rc")
+ endif()
+ 
+-add_executable(warzone2100 ${HEADERS} ${SRC} "${wz2100_autorevision_h_file}" ${_additionalSourceFiles})
++if(ANDROID)
++	add_library(warzone2100 SHARED ${HEADERS} ${SRC} "${wz2100_autorevision_h_file}" ${_additionalSourceFiles})
++	# SDL_main lives in the static SDL backend. Keep and export it for SDLActivity.
++	target_link_options(warzone2100 PRIVATE "-Wl,-u,SDL_main" "-Wl,-z,max-page-size=16384")
++	find_package(SDL3 CONFIG REQUIRED)
++	target_link_libraries(warzone2100 SDL3::SDL3 log)
++else()
++	add_executable(warzone2100 ${HEADERS} ${SRC} "${wz2100_autorevision_h_file}" ${_additionalSourceFiles})
++endif()
+ include(WZTargetConfiguration)
+ WZ_TARGET_CONFIGURATION(warzone2100)
+ target_compile_definitions(warzone2100 PRIVATE "YY_NO_UNISTD_H")
+diff --git a/src/android_touch.h b/src/android_touch.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..411eda731043368c4243ce0c34fd503ac6a4ebd6
+--- /dev/null
++++ b/src/android_touch.h
+@@ -0,0 +1,8 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++#pragma once
++#if defined(__ANDROID__)
++#include "lib/sdl/touch_gestures.h"
++bool androidWorldInputAvailable();
++bool androidWorldInputAt(wz::touch::Point point);
++void androidApplyWorldGesture(const wz::touch::Action &action);
++#endif
+diff --git a/src/display.cpp b/src/display.cpp
+index 9f1b1bd81f03327d0fef55866984e7446464e03a..0215536de2468c9f8e8ec2033ea2556ee74ae49f 100644
+--- a/src/display.cpp
++++ b/src/display.cpp
+@@ -81,6 +81,12 @@
+ #include "input/keyconfig.h"
+ #include "mapgrid.h"
+ #include "main.h"
++#if defined(__ANDROID__)
++#include "android_touch.h"
++#include "lib/sdl/android_input.h"
++#include "lib/widget/form.h"
++#include "loadsave.h"
++#endif
+ 
+ InputManager gInputManager;
+ KeyFunctionConfiguration gKeyFuncConfig;
+@@ -1033,6 +1039,10 @@ static void calcScroll(double *y, double *dydt, double accel, double decel, doub
+ 
+ static inline bool shouldProcessEdgeScroll()
+ {
++#if defined(__ANDROID__)
++	// A resting finger/cursor near the edge must not keep moving the camera.
++	if (wzAndroidUsingTouch()) return false;
++#endif
+ 	return wzMouseInWindow() || (bEdgeScrollOutsideWindowBounds && wzWindowHasFocus());
+ }
+ 
+@@ -2807,3 +2817,127 @@ bool dispInitialise()
+ 	gInputManager.contexts().resetStates();
+ 	return true;
+ }
++
++#if defined(__ANDROID__)
++// World gestures use game actions directly. In particular, selecting one unit
++// must not go through the desktop double-click handler (select all of a type).
++bool androidWorldInputAvailable()
++{
++    return GetGameMode() == GS_NORMAL && mapWidth > 1 && mapHeight > 1 &&
++        !gamePaused() && !gameUpdatePaused() && !InGameOpUp && !isInGamePopupUp &&
++        !bLoadSaveUp && !bDisplayMultiJoiningStatus && !loop_GetVideoStatus();
++}
++
++static bool androidTouchesWidget(const std::shared_ptr<WIDGET> &widget, wz::touch::Point point)
++{
++    if (!widget || !widget->visible() || !widget->screenGeometry().contains(static_cast<int>(point.x), static_cast<int>(point.y))) return false;
++    for (const auto &child : widget->children()) {
++        if (androidTouchesWidget(child, point)) return true;
++    }
++    if (widget->transparentToMouse() || widget->transparentToClicks()) return false;
++    // Invisible layout containers may fill the entire playfield.
++    return widget->type != WIDG_FORM || !(widget->style & WFORM_INVISIBLE);
++}
++
++bool androidWorldInputAt(wz::touch::Point point)
++{
++    if (!androidWorldInputAvailable() || tryingToGetLocation() || deliveryReposValid()) return false;
++    bool overWidget = false;
++    auto checkScreen = [&](const std::shared_ptr<W_SCREEN> &screen) {
++        if (!screen || !screen->psForm) return;
++        for (const auto &child : screen->psForm->children()) {
++            if (androidTouchesWidget(child, point)) { overWidget = true; break; }
++        }
++    };
++    if (getWidgetsStatus()) checkScreen(psWScreen);
++    widgForEachOverlayScreen([&](const std::shared_ptr<W_SCREEN> &screen, uint16_t) {
++        checkScreen(screen); return !overWidget;
++    });
++    return !overWidget;
++}
++
++void androidApplyWorldGesture(const wz::touch::Action &action)
++{
++    using wz::touch::Kind;
++    if (action.kind == Kind::BoxCancel) { dragBox3D.status = DRAG_INACTIVE; return; }
++    if (!androidWorldInputAvailable()) return;
++    switch (action.kind) {
++    case Kind::Tap:
++    case Kind::DoubleTap: {
++        if (!androidWorldInputAt(action.at)) return;
++        // The pointer just moved; update the world hit location before issuing
++        // an order rather than using the previous frame's terrain coordinates.
++        mouseTileX = mouseTileY = -1;
++        screenCoordToWorld(Vector2i(mouseX(), mouseY()), mousePos, mouseTileX, mouseTileY);
++        if (!tileOnMap(mouseTileX, mouseTileY)) return;
++        BASE_OBJECT *target = mouseTarget();
++        if (action.kind == Kind::DoubleTap) {
++            if (target && target->type == OBJ_DROID && target->player == selectedPlayer) {
++                auto *droid = static_cast<DROID *>(target);
++                if (isSelectable(droid)) {
++                    clearSelection(); SelectDroid(droid); intObjectSelected(droid); FeedbackOrderGiven();
++                }
++            }
++        } else {
++            // Gestures keep their meaning even when a desktop mouse preference
++            // is changed. Restore that preference after dispatching the action.
++            const bool savedRightClickOrders = bRightClickOrders;
++            bRightClickOrders = true;
++            if (selNumSelected(selectedPlayer) > 0 || bLasSatStruct) dealWithLMB();
++            else if (target && target->type == OBJ_STRUCTURE) dealWithRMB();
++            bRightClickOrders = savedRightClickOrders;
++        }
++        break;
++    }
++    case Kind::Deselect:
++        dragBox3D.status = DRAG_INACTIVE;
++        handleDeselectionClick();
++        break;
++    case Kind::Pan: {
++        if (getWarCamStatus()) camToggleStatus();
++        resetScroll();
++        const float speed = std::max(1.f, getViewDistance() / 500.f);
++        const float dx = -(action.at.x - action.from.x) * speed;
++        const float dz = (action.at.y - action.from.y) * speed;
++        const double angle = -playerPos.r.y * (M_PI / 32768);
++        playerPos.p.x += static_cast<int>(std::cos(angle) * dx + std::sin(angle) * dz);
++        playerPos.p.z += static_cast<int>(std::sin(angle) * dx - std::cos(angle) * dz);
++        CheckScrollLimits();
++        break;
++    }
++    case Kind::Pinch: {
++        const float target = glm::clamp(getViewDistance() * action.scale, 250.f,
++            static_cast<float>(NETisReplay() ? MAXDISTANCE_REPLAY : MAXDISTANCE));
++        animateToViewDistance(target, 0);
++        updateViewDistanceAnimation();
++        break;
++    }
++    case Kind::Rotate: {
++        if (getWarCamStatus()) camToggleStatus();
++        resetScroll();
++        // Rightward swipes / clockwise twists follow desktop rotation. Keep
++        // yaw in one revolution so repeated turns cannot overflow the angle.
++        const int delta = static_cast<int>(std::lround(action.radians * (32768.0 / M_PI)));
++        playerPos.r.y = (playerPos.r.y - delta) % DEG(360);
++        if (playerPos.r.y < 0) playerPos.r.y += DEG(360);
++        Vector3i rotation(playerPos.r.x, playerPos.r.y, playerPos.r.z);
++        camInformOfRotation(&rotation);
++        break;
++    }
++    case Kind::BoxBegin:
++    case Kind::BoxMove:
++    case Kind::BoxEnd:
++        dragBox3D.x1 = static_cast<int>(action.from.x);
++        dragBox3D.y1 = static_cast<int>(action.from.y);
++        dragBox3D.x2 = static_cast<int>(action.at.x);
++        dragBox3D.y2 = static_cast<int>(action.at.y);
++        if (action.kind == Kind::BoxEnd) {
++            clearSelection();
++            dragBox3D.status = DRAG_RELEASED;
++        } else dragBox3D.status = DRAG_DRAGGING;
++        break;
++    case Kind::BoxCancel:
++        break;
++    }
++}
++#endif
+diff --git a/src/main.cpp b/src/main.cpp
+index 46522b86eb368289a3f19f480485ffa3045dfaeb..0e18999e9ea696dac0f53a58e145a6368b9efdb0 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -514,9 +514,23 @@ static void initialize_ConfigDir()
+ /*!
+  * Initialize the PhysicsFS library.
+  */
++#if defined(__ANDROID__)
++#include <SDL3/SDL_system.h>
++#include <jni.h>
++#endif
++
+ static void initialize_PhysicsFS(const char *argv_0)
+ {
++#if defined(__ANDROID__)
++	// PhysicsFS on Android needs the Java context, not the Linux argv[0].
++	PHYSFS_AndroidInit init;
++	init.jnienv = SDL_GetAndroidJNIEnv();
++	init.context = SDL_GetAndroidActivity();
++	int result = PHYSFS_init(reinterpret_cast<const char *>(&init));
++	static_cast<JNIEnv *>(init.jnienv)->DeleteLocalRef(static_cast<jobject>(init.context));
++#else
+ 	int result = PHYSFS_init(argv_0);
++#endif
+ 
+ 	if (!result)
+ 	{
+diff --git a/src/urlrequest_curl.cpp b/src/urlrequest_curl.cpp
+index 90eb75ea4340d303f28a804a2bada118ad0e2ed1..656211e23283c17b70e68a681abe704e152c447e 100644
+--- a/src/urlrequest_curl.cpp
++++ b/src/urlrequest_curl.cpp
+@@ -70,6 +70,9 @@
+ #include <stdlib.h>
+ #include <chrono>
+ #include <sstream>
++#if defined(__ANDROID__)
++#include <unistd.h>
++#endif
+ #include <stdexcept>
+ #include <unordered_map>
+ 
+@@ -465,6 +468,16 @@ public:
+ 
+ 		curl_easy_setopt(handle, CURLOPT_URL, url().c_str());
+ 
++#if defined(__ANDROID__)
++		// Android 14+ supplies the system trust store through Conscrypt's APEX.
++		const char *androidCAPath = "/apex/com.android.conscrypt/cacerts";
++		if (access(androidCAPath, R_OK) != 0)
++		{
++			androidCAPath = "/system/etc/security/cacerts";
++		}
++		curl_easy_setopt(handle, CURLOPT_CAPATH, androidCAPath);
++#endif
++
+ #if LIBCURL_VERSION_NUM >= 0x071000	// cURL 7.16.0+
+ 		curl_easy_setopt(handle, CURLOPT_SOCKOPTFUNCTION, sockopt_callback);
+ #endif

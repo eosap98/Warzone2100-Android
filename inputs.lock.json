@@ -1,0 +1,35 @@
+{
+  "snapshot_date": "2026-11-12",
+  "app_version": "4.7.0-android.6",
+  "version_code": 4070006,
+  "source": {
+    "url": "https://github.com/Warzone2100/warzone2100.git",
+    "tag": "4.7.0",
+    "commit": "7d3d8e51a61ceee89e6bf672a41337e1a9cd7392",
+    "submodules": {
+      "3rdparty/EmbeddedJSONSignature": "2a571b0cbe8f8bdeacb02361fcf8be7c687f7778",
+      "3rdparty/SQLiteCpp": "9ec14deb24377cd24f381ff1ab1ef59228cd261b",
+      "3rdparty/basis_universal": "df079eca71cf83481c45059dce2165348dc1a5ea",
+      "3rdparty/date": "45d45413ab89eb23b980aceab4c843fcc0cb9d4a",
+      "3rdparty/expected": "ea916f39627f02f192b5ec532210ab184e266e3e",
+      "3rdparty/fmt": "407c905e45ad75fc29bf0f9bb7c5c2fd3475976f",
+      "3rdparty/glm": "2d4c4b4dd31fde06cfffad7915c2b3006402322f",
+      "3rdparty/launchinfo": "cfdd12564ab6cc30dc70a28571f6e8adfb5caeed",
+      "3rdparty/libplum": "47be21b97ec12b3311b60d66e4c078b92ee4bcbc",
+      "3rdparty/quickjs-wz": "a57c62729bc40809b84fb83db38c0d048992533c",
+      "3rdparty/re2": "b059ae85c83ca6b1f29dba20e92e4acb85cb5b29",
+      "3rdparty/readerwriterqueue": "211616e0554f93152ab3108b8d93fbc23174a9d9",
+      "3rdparty/utf8proc": "e5e799221b45bbb90f5fdc5c69b6b8dfbf017e78",
+      "3rdparty/utfcpp": "f9319195dfddf369f68f18e7c0039b3f351797fd",
+      "lib/netplay/3rdparty/miniupnp": "2a74cb2f27cacf06d2b50c187e8f90aa1f5c2528",
+      "lib/sound/3rdparty/opusfile": "9d718345ce03b2fad5d7d28e0bcd1cc69ab2b166"
+    }
+  },
+  "patch_sha256": "f593d1a778d41905dec03923f8a20832ad80ae6c3581f1f69388c25b8260edf9",
+  "game_data": {
+    "filename": "warzone2100_ubuntu24.04_amd64.deb",
+    "url": "https://github.com/Warzone2100/warzone2100/releases/download/4.7.0/warzone2100_ubuntu24.04_amd64.deb",
+    "size": 393126664,
+    "sha256": "5c6ad94cb6753cd8cfec9b38a4c0686d04802eaf1aa55289eda40d1f1709cd72"
+  }
+}
